@@ -19,13 +19,14 @@ export const themes = {
     aiRust: {
         name: 'AI + Rust 资讯日报',
         shortName: 'AI & Rust 日报',
-        description: 'AI科技动态 + Rust编程资讯',
+        description: 'AI科技动态 + Rust编程资讯 + HackerNews',
         dataSources: {
             news: { name: '新闻', sources: [NewsAggregatorDataSource] },
             project: { name: '项目', sources: [GithubTrendingDataSource] },
             paper: { name: '论文', sources: [PapersDataSource] },
             socialMedia: { name: '社交平台', sources: [TwitterDataSource, RedditDataSource] },
             rust: { name: 'Rust 资讯', sources: [RustDataSource] },
+            startup: { name: 'HackerNews', sources: [StartupDataSource] },
         },
         prompts: {
             dailyTitle: 'AI + Rust 资讯日报',
