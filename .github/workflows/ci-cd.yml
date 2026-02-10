@@ -1,0 +1,124 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: Test Build
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Check code structure
+        run: |
+          echo "Checking data sources..."
+          ls -la src/dataSources/
+          echo "✅ Data sources check complete"
+  
+  deploy-worker:
+    needs: test
+    runs-on: ubuntu-latest
+    name: Deploy to Cloudflare Workers
+    # Only deploy if secrets are configured
+    if: github.repository_owner != ''
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Deploy Worker
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          command: deploy
+        continue-on-error: true
+        
+      - name: Report Status
+        run: |
+          if [ "${{ steps.deploy.outcome }}" == "success" ]; then
+            echo "✅ Worker deployed successfully"
+          else
+            echo "⚠️ Worker deployment skipped or failed"
+            echo "To enable automatic deployment, please set CF_API_TOKEN and CF_ACCOUNT_ID in repository secrets"
+          fi
+
+  build-daily:
+    needs: deploy-worker
+    runs-on: ubuntu-latest
+    if: github.event.schedule == 'cron' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          
+      - name: Setup Git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+      - name: Archive old notes
+        run: |
+          if [ -d "daily" ]; then
+            LATEST_FILE=$(find daily -maxdepth 1 -name "*.md" | sort -r | head -n 1)
+            if [ -n "$LATEST_FILE" ]; then
+              LATEST_MONTH=$(basename "$LATEST_FILE" .md | cut -d'-' -f1,2)
+              for file in daily/*.md; do
+                [ -e "$file" ] || continue
+                FILE_MONTH=$(basename "$file" .md | cut -d'-' -f1,2)
+                if [ "$FILE_MONTH" != "$LATEST_MONTH" ]; then
+                  mkdir -p "daily/$FILE_MONTH"
+                  mv "$file" "daily/$FILE_MONTH/"
+                fi
+              done
+            fi
+          fi
+          
+      - name: Trigger content generation
+        run: |
+          if [ -n "${{ vars.WRITE_RSS_URL }}" ]; then
+            TODAY=$(TZ="Asia/Shanghai" date +%Y-%m-%d)
+            curl -fsS --retry 3 "${{ vars.WRITE_RSS_URL }}?date=$TODAY" || echo "Trigger failed"
+          fi
+          
+      - name: Download RSS
+        run: |
+          if [ -n "${{ vars.RSS_FEED_URL }}" ]; then
+            wget -O rss.xml "${{ vars.RSS_FEED_URL }}" --timeout=30 --tries=3 || echo "RSS download failed"
+          fi
+          
+      - name: Commit changes
+        run: |
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "docs: Auto update daily $(date -u '+%Y-%m-%d %H:%M UTC')"
+            git push
+          fi

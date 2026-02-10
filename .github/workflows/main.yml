@@ -1,0 +1,108 @@
+name: Deploy Worker and Build Daily
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  deploy-worker:
+    runs-on: ubuntu-latest
+    name: Deploy to Cloudflare Workers
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Deploy Worker
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CF_API_TOKEN }}
+          accountId: ${{ secrets.CF_ACCOUNT_ID }}
+          command: deploy
+          
+      - name: Output Worker URL
+        run: |
+          echo "✅ Worker 部署成功！"
+          echo "🔗 Worker URL: ${{ steps.deploy.outputs.deployment-url }}"
+          echo ""
+          echo "📋 请将此 URL 添加到 GitHub Variables："
+          echo "   - WRITE_RSS_URL: ${{ steps.deploy.outputs.deployment-url }}/writeRssData"
+          echo "   - RSS_FEED_URL: ${{ steps.deploy.outputs.deployment-url }}/getRss"
+
+  build-daily:
+    needs: deploy-worker
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout book branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          
+      - name: Setup Git
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+      - name: Archive old daily notes
+        run: |
+          echo "📁 归档旧日刊..."
+          if [ -d "daily" ]; then
+            LATEST_FILE=$(find daily -maxdepth 1 -name "*.md" | sort -r | head -n 1)
+            if [ -n "$LATEST_FILE" ]; then
+              LATEST_MONTH=$(basename "$LATEST_FILE" .md | cut -d'-' -f1,2)
+              for file in daily/*.md; do
+                [ -e "$file" ] || continue
+                FILE_MONTH=$(basename "$file" .md | cut -d'-' -f1,2)
+                if [ "$FILE_MONTH" != "$LATEST_MONTH" ]; then
+                  mkdir -p "daily/$FILE_MONTH"
+                  mv "$file" "daily/$FILE_MONTH/"
+                  echo "  归档: $file -> daily/$FILE_MONTH/"
+                fi
+              done
+            fi
+          fi
+          
+      - name: Trigger daily content generation
+        run: |
+          if [ -n "${{ vars.WRITE_RSS_URL }}" ]; then
+            echo "🤖 触发日报生成..."
+            TODAY=$(TZ="Asia/Shanghai" date +%Y-%m-%d)
+            curl -fsS --retry 3 "${{ vars.WRITE_RSS_URL }}?date=$TODAY" || echo "⚠️ 触发失败，但继续执行"
+          else
+            echo "⚠️ WRITE_RSS_URL 未设置，跳过触发"
+          fi
+          
+      - name: Download RSS
+        run: |
+          if [ -n "${{ vars.RSS_FEED_URL }}" ]; then
+            echo "📥 下载 RSS Feed..."
+            wget -O rss.xml "${{ vars.RSS_FEED_URL }}" --timeout=30 --tries=3 || echo "⚠️ RSS 下载失败"
+          fi
+          
+      - name: Commit changes
+        run: |
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "docs: 自动更新日报 $(date -u '+%Y-%m-%d %H:%M UTC')"
+            git push
+            echo "✅ 已提交日报更新"
+          else
+            echo "ℹ️ 没有变更需要提交"
+          fi

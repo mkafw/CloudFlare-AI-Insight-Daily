@@ -1,0 +1,96 @@
+# wrangler.toml
+# AI + Rust 资讯日报 - Cloudflare Workers 配置
+
+# ==================== 基础配置 ====================
+name = "ai-rust-daily"  # 修改为你的 Worker 名称（英文，小写，用连字符分隔）
+main = "src/index.js"
+compatibility_date = "2025-05-20"
+workers_dev = true
+
+# ==================== KV 存储配置 ====================
+# 1. 运行: wrangler kv namespace create "DATA_KV"
+# 2. 复制输出的 id 替换下方的 "你的-KV-ID"
+kv_namespaces = [
+  { binding = "DATA_KV", id = "你的-KV-ID" }
+]
+
+# ==================== 环境变量配置 ====================
+[vars]
+
+# -------- 图片代理（可选）--------
+IMG_PROXY = ""  # 用于处理图片不显示的问题，可留空
+
+# -------- 翻译配置 --------
+OPEN_TRANSLATE = "true"  # 是否开启自动翻译
+
+# -------- AI 模型配置 --------
+# 选择使用的 AI 平台: GEMINI 或 OPEN
+USE_MODEL_PLATFORM = "GEMINI"
+
+# Google Gemini 配置（推荐）
+GEMINI_API_KEY = "你的-Gemini-API-Key"
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta"
+DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-preview-05-20"
+
+# OpenAI 兼容 API 配置（可选）
+# OPENAI_API_KEY = "sk-你的-OpenAI-Key"
+# OPENAI_API_URL = "https://api.openai.com/v1"
+# DEFAULT_OPEN_MODEL = "gpt-4"
+
+# -------- Folo 配置（可选）--------
+# 如需从 Folo 获取内容，在后台管理界面配置 cookie
+FOLO_COOKIE_KV_KEY = "folo_auth_cookie"
+FOLO_DATA_API = "https://api.follow.is/entries"
+FOLO_FILTER_DAYS = 1
+
+# -------- 数据源配置 --------
+# 新闻聚合源（Folo List ID）
+NEWS_AGGREGATOR_LIST_ID = "158437828119024640"
+NEWS_AGGREGATOR_FETCH_PAGES = "1"
+
+# HuggingFace 论文
+HGPAPERS_LIST_ID = "158437917409783808"
+HGPAPERS_FETCH_PAGES = "1"
+
+# Twitter/X 社交媒体
+TWITTER_LIST_ID = "153028784690326528"
+TWITTER_FETCH_PAGES = "1"
+
+# Reddit
+REDDIT_LIST_ID = "167576006499975168"
+REDDIT_FETCH_PAGES = "1"
+
+# GitHub Trending 项目
+PROJECTS_API_URL = "https://git-trending.justlikemaki.vip/topone/?since=daily"
+
+# -------- GitHub 配置 --------
+# GitHub Personal Access Token（用于发布到 Pages）
+GITHUB_TOKEN = "github_pat_你的-Token"
+
+# 目标仓库信息（日报将发布到这个仓库的 GitHub Pages）
+GITHUB_REPO_OWNER = "你的-GitHub-用户名"
+GITHUB_REPO_NAME = "你的-仓库名"
+GITHUB_BRANCH = "main"
+
+# -------- 登录配置 --------
+# 后台管理界面登录凭据
+LOGIN_USERNAME = "admin"
+LOGIN_PASSWORD = "你的-强密码"
+
+# -------- 日报内容配置 --------
+# 日报标题
+DAILY_TITLE = "AI + Rust 资讯日报"
+DAILY_TITLE_MIN = " `AI & Rust 日报` "
+
+# 播客配置
+PODCAST_TITLE = "你的播客名称"
+PODCAST_BEGIN = "欢迎来到今天的 AI 和 Rust 资讯时间，我是主播..."
+PODCAST_END = "感谢收听，我们明天再见！"
+
+# 网站链接
+BOOK_LINK = "https://你的用户名.github.io/你的仓库名"
+
+# 内容增强配置
+INSERT_FOOT = "false"
+INSERT_AD = "false"
+INSERT_APP_URL = "<h3>[查看完整版日报↗️](https://你的用户名.github.io/你的仓库名)</h3>"
